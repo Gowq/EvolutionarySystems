@@ -60,6 +60,8 @@ class CipherBreaker:
         self.population_size = population_size
         self.mutation_rate = mutation_rate
         self.elite_size = elite_size
+        self.best_fitness = float('-inf')
+        self.best_solution = None
         
         # Initialize population
         self.population = self._generate_initial_population()
@@ -144,10 +146,9 @@ class CipherBreaker:
         Returns:
             Tuple[str, float]: Best alphabet and its fitness score
         """
-        best_solution = None
-        best_fitness = float('-inf')
-        
         progress_bar = tqdm(range(generations))
+        stagnation_counter = 0  # Counts how many generations have passed without improvement
+        
         for gen in progress_bar:
             # Evaluate fitness of current population
             fitness_scores = [self._fitness(alpha) for alpha in self.population]
@@ -158,12 +159,36 @@ class CipherBreaker:
             current_best_fitness = fitness_scores[current_best_idx]
             current_best_solution = self.population[current_best_idx]
             
-            if current_best_fitness > best_fitness:
-                best_fitness = current_best_fitness
-                best_solution = current_best_solution
+            # Check if there's an improvement
+            if current_best_fitness > self.best_fitness:
+                self.best_fitness = current_best_fitness
+                self.best_solution = current_best_solution
+                stagnation_counter = 0  # Reset stagnation counter
+            else:
+                stagnation_counter += 1
+            
+            # Dynamic parameter adjustment based on fitness progress
+            if stagnation_counter > 20:
+                # If the algorithm hasn't improved for 20 generations, increase mutation rate
+                self.mutation_rate = min(self.mutation_rate * 1.1, 1.0)  # Cap to 1.0 max
+            elif stagnation_counter == 0 and self.mutation_rate > 0.1:
+                # If the algorithm is improving, reduce mutation rate to refine
+                self.mutation_rate = max(self.mutation_rate * 0.9, 0.1)
+            
+            if stagnation_counter > 50:
+                # If no improvement for 50 generations, increase population size
+                self.population_size = min(self.population_size * 2, 1000)  # Cap population size
+            elif stagnation_counter == 0 and self.population_size > 100:
+                # If we are improving, reduce population size slightly
+                self.population_size = max(self.population_size // 2, 50)
+            
+            # Print parameters at every 10th generation
+            if (gen % 10 == 0):
+                print(f"\nGeneration {gen} - Stagnation: {stagnation_counter}, "
+                      f"Mutation Rate: {self.mutation_rate:.4f}, Population Size: {self.population_size}")
             
             # Update progress bar
-            progress_bar.set_description(f"Best Score: {best_fitness:.2f}")
+            progress_bar.set_description(f"Best Score: {self.best_fitness:.2f}")
             
             # Selection: sort population by fitness
             sorted_population = [x for _, x in sorted(zip(fitness_scores, self.population), 
@@ -191,7 +216,7 @@ class CipherBreaker:
             
             self.population = new_population
         
-        return best_solution, best_fitness
+        return self.best_solution, self.best_fitness
 
 def main():
     # Input handling
@@ -217,10 +242,10 @@ def main():
     
     # Run evolutionary cipher breaker
     breaker = CipherBreaker(data, freq, 
-                            population_size=100, 
-                            mutation_rate=0.9, 
-                            elite_size=3)
-    best_alphabet, best_score = breaker.evolve(generations=100)
+                            population_size=200, 
+                            mutation_rate=0.1, 
+                            elite_size=20)
+    best_alphabet, best_score = breaker.evolve(generations=400)
     
     # Output results
     print("\nBest Substitution Alphabet:")
